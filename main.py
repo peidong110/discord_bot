@@ -1,11 +1,52 @@
-from datetime import datetime
-
+import requests
 import discord
 from discord.ext import commands
+from datetime import datetime
+import re
 
 bot = commands.Bot(command_prefix='#')
+miners = []
+endpoint = 'https://api.ethermine.org'
+reduce_digit_list = ['reportedHashrate', 'currentHashrate', 'averageHashrate']
+regular_items = ['validShares', 'staleShares', 'activeWorkers']
 
-server_name = "凤凰堂"
+
+# USD PER MIN and unpad;
+async def get_data(miner_address):
+    results = {}
+    request_url = endpoint + '/miner/' + miner_address + '/currentStats'
+    res = requests.get(request_url)
+    if res.status_code == 200:
+        print(res.json())
+        res = res.json()
+        keys = res['data'].keys()
+        for item in keys:
+            if item in reduce_digit_list:
+                values = str(res['data'][item])[0:3]
+                updatedItem = item[0].upper() + item[1:].replace("Hashrate", " Hashrate")
+                results[updatedItem] = values
+            elif item in regular_items:
+                values = str(res['data'][item])
+                updatedItem = item[0].upper() + item[1:].replace("Share", " Share").replace("Workers", " Workers")
+                results[updatedItem] = values
+            elif item == 'unpaid':
+                unpaid_balance = '0.' + str(res['data'][item])[0:5]
+                results['Unpaid ETH'] = unpaid_balance
+            elif item == 'usdPerMin':
+                value = res['data']['usdPerMin']
+                print("usd per min = :" + str(value))
+                value *= 60 * 24
+                # print(format(321, ".2f"))
+                results['USD Per Day'] = round(value, 2)
+            #return rate
+            results['Rate:'] = round(1-res['data']['staleShares']/(res['data']['staleShares']+res['data']['validShares']),4)
+            # else:
+            #     results[item] = str(res['data'][item])
+        print("RESULT:")
+        print(results)
+    else:
+        print("Potential Error")
+    return results
 
 
 @bot.event
@@ -14,52 +55,41 @@ async def on_ready():
     print(bot.user.name)
     print(bot.user.id)
     print('------')
-    # for guild in bot.guilds:
-    # if guild.name == server_name:
-    #     for member in guild.members:
-    #         print("Member:"+str(member))
-    #     break
-
-    # members = '\n - '.join([member.name for member in guild.members])
-    # print(f'Guild Members:\n - {members}')
 
 
-@bot.command()
-async def get_members(ctx):
-    embed = discord.Embed(
-        title='Total Member:',
-        description=f'There are currently **{ctx.guild.member_count}** members in the server!',
-        timestamp=datetime.now(),
-        color=discord.Colour.random()
-    )
-    embed.set_footer(text=f'{ctx.message.guild.name}')
-    await ctx.send(embed=embed)
+def is_valid_address(address):
+    if len(address) == 42 and address[0:2] == "0x" and address[2:].isalnum():
+        return True
+    else:
+        return False
 
 
-@bot.command()
-async def info(ctx):
-    print(ctx)
-    embed = discord.Embed(title="WHO WHO WHO BOT", description="A bot", color=0xeee657)
-    # give info about you here
-    embed.add_field(name="Author", value="mr.spoon")
-    # Shows the number of servers the bot is member of.
-    embed.add_field(name="Server count", value=f"{len(bot.guilds)}")
-    # give users a link to invite thsi bot to their server
-    # embed.add_field(name="Invite", value="[Invite link](<insert your OAuth invitation link here>)")
+@bot.event
+async def on_message(message):
+    if message.author == bot.user:
+        return
+    if message.content.startswith('$show miner'):
+        content = message.content.split(" ")
+        if is_valid_address(content[2]):
+            dic = await get_data(content[2])
+            embed = discord.Embed(title="Miner Stats: ", color=0xeee657)
+            # give info about you here
 
-    await ctx.send(embed=embed)
+            for item in dic:
+                embed.add_field(name=f'{item}', value=f'{dic[item]}')
+            # Shows the number of servers the bot is member of.
+            # give users a link to invite thsi bot to their server
+            # embed.add_field(name="Invite", value="[Invite link](<insert your OAuth invitation link here>)")
+
+            await message.channel.send(embed=embed)
+        else:
+            await message.channel.send('Sorry, ' + message.content + " you just entered is not a valid erc20 address.")
+
+        print("Content:" + str(content))
+        # await message.channel.send('Hello World!' + message.content)
+
+    # print("hello"+str(message))
 
 
-bot.remove_command('help')
 
-
-@bot.command()
-async def help(ctx):
-    embed = discord.Embed(title="nice bot", description="A Very Nice bot. List of commands are:", color=0xeee657)
-    embed.add_field(name="#info", value="return info", inline=False)
-    embed.add_field(name="#help", value="help menu", inline=False)
-    embed.add_field(name="#get_members", value="return member #", inline=False)
-    await ctx.send(embed=embed)
-
-
-bot.run(os.getenv('TOKEN'))
+bot.run('TOKEN')
