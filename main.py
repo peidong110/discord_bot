@@ -10,8 +10,6 @@ endpoint = 'https://api.ethermine.org'
 reduce_digit_list = ['reportedHashrate', 'currentHashrate', 'averageHashrate']
 regular_items = ['validShares', 'staleShares', 'activeWorkers']
 
-
-# USD PER MIN and unpad;
 async def get_data(miner_address):
     results = {}
     request_url = endpoint + '/miner/' + miner_address + '/currentStats'
