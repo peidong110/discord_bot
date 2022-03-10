@@ -8,21 +8,9 @@ from discord.ext import commands
 
 bot = commands.Bot(command_prefix='$')
 end_point = "https://api.ethermine.org"
+
 listening_flg = False
 original_worker_lis = {}
-
-
-def check_offline_worker(cur_workers, register_workers):
-    # Input: list of workers, list of workers when registered
-    # list of off-line worker
-    # Constraints: This function will be only called when # of workers < registered workers.
-    offline_worker = []
-    for worker in register_workers:
-        if worker not in cur_workers:
-            offline_worker.append(worker)
-
-    return offline_worker
-
 
 def retrieve_original_worker(endpoint):
     initial_worker = []
@@ -35,14 +23,13 @@ def retrieve_original_worker(endpoint):
     return initial_worker
 
 
-def retrieve_current_worker(endpoint):
-    cur_worker = []
+async def retrieve_current_worker(ctx, endpoint):
     res = requests.get(url=endpoint)
     if res.status_code == 200:
         data = res.json()['data']
         for i in data:
-            cur_worker.append(i)
-    return cur_worker
+            if (i['time'] - i['lastSeen']) / 60 > 5:
+                await ctx.channel.send(f"{i['worker']} is offline for more than 15 minutes, check your mining machine!")
 
 
 async def register_miner(ctx, address, endpoint):
@@ -51,7 +38,7 @@ async def register_miner(ctx, address, endpoint):
     else:
         original = retrieve_original_worker(endpoint=endpoint)
         original_worker_lis[address] = original
-        print("Miner Registered!")
+        # print("Miner Registered!")
         print(original_worker_lis)
 
 
@@ -62,12 +49,7 @@ async def start_listening(ctx):
         # If we have one address:
         for key in list(original_worker_lis):
             # miners.append(end_point + "/miner/" + args[0] + "/workers")
-            current_worker = retrieve_current_worker(f"{end_point}/miner/{key}/workers")
-            result = check_offline_worker(cur_workers=current_worker, register_workers=original_worker_lis[key])
-            if len(result) > 1:
-                await ctx.channel.send(f"{result} in {key}")
-            else:
-                await ctx.channel.send(f"Nothing Happened")
+            await retrieve_current_worker(ctx=ctx, endpoint=f"{end_point}/miner/{key}/workers")
 
 
 @commands.command(brief="start")
@@ -75,7 +57,7 @@ async def start(ctx):
     await ctx.channel.send("START!")
     while True:
         await start_listening(ctx=ctx)
-        time.sleep(10)
+        time.sleep(120)
 
 
 @commands.command(brief="stop")
@@ -119,11 +101,6 @@ async def on_ready():
     for guild in bot.guilds:
         print(guild)
 
-
-#
-# @bot.event
-# async def on_message(message):
-
 @bot.event
 async def on_message(msg):
     # do some extra stuff here
@@ -149,4 +126,4 @@ bot.add_command(add_address)
 bot.add_command(start)
 bot.add_command(stop)
 
-bot.run('TOKEN')
+bot.run('Token')
